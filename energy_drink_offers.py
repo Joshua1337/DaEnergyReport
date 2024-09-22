@@ -1,23 +1,28 @@
+"""
+Energy Drink Offers Bot
+This script fetches energy drink offers and sends them to a Telegram bot.
+"""
+
 import os
-import configparser
-import requests
-from bs4 import BeautifulSoup
 import re
 import datetime
-import random
 import json
-from datetime import datetime
+import random
 import html
+from datetime import datetime
+
+import requests
+from bs4 import BeautifulSoup
 
 # File paths for config and facts
-config_file_path = 'config.ini'
-facts_file_path = 'facts.json'
+CONFIG_FILE_PATH = 'config.ini'
+FACTS_FILE_PATH = 'facts.json'
 
 # Toggle supermarket filter (True to filter by popular supermarkets, False to include all)
-use_supermarket_filter = True
+USE_SUPERMARKET_FILTER = True
 
 # List of big cities in Germany with their zip codes
-big_cities = {
+BIG_CITIES = {
     'Berlin': '10115',
     'Hamburg': '20095',
     'Munich': '80331',
@@ -33,8 +38,9 @@ big_cities = {
 # Read configuration from config.ini
 config = configparser.ConfigParser()
 
-# Function to update API keys in config.ini
+
 def update_api_keys(x_apikey, x_clientkey):
+    """Updates the API keys in the config.ini file."""
     print("Updating API keys in config.ini...")
 
     # Ensure the API section exists
@@ -47,14 +53,15 @@ def update_api_keys(x_apikey, x_clientkey):
 
     # Write to the config file
     try:
-        with open(config_file_path, 'w') as configfile:
-            config.write(configfile)
+        with open(CONFIG_FILE_PATH, 'w', encoding='utf-8') as config_file:
+            config.write(config_file)
         print("API keys successfully written to config.ini.")
-    except Exception as e:
-        print(f"Error writing to config.ini: {e}")
+    except Exception as error:
+        print(f"Error writing to config.ini: {error}")
 
-# Function to retrieve API keys from Marktguru
+
 def retrieve_api_keys():
+    """Retrieves API keys from the Marktguru website."""
     print("Retrieving API keys from Marktguru...")
 
     response = requests.get("https://www.marktguru.de/")
@@ -88,50 +95,48 @@ def retrieve_api_keys():
     else:
         print(f"Failed to retrieve API keys. Status code: {response.status_code}")
 
-# Load or create config.ini
-if os.path.exists(config_file_path):
+
+if os.path.exists(CONFIG_FILE_PATH):
     print("Loading config.ini...")
-    config.read(config_file_path)
+    config.read(CONFIG_FILE_PATH)
 else:
     print("Creating new config.ini...")
     config['Telegram'] = {'bot_token': '', 'chat_id': ''}
     config['API'] = {'x_apikey': '', 'x_clientkey': ''}
-    with open(config_file_path, 'w') as configfile:
-        config.write(configfile)
+    with open(CONFIG_FILE_PATH, 'w', encoding='utf-8') as config_file:
+        config.write(config_file)
 
-# Fetch API keys if not already set or empty
 if not config.get('API', 'x_apikey') or not config.get('API', 'x_clientkey'):
     retrieve_api_keys()
 
-# Telegram bot information
 TELEGRAM_BOT_TOKEN = config.get('Telegram', 'bot_token')
 CHAT_ID = config.get('Telegram', 'chat_id')
 
 # List of most popular supermarkets in Germany
-most_popular_supermarkets = [
+MOST_POPULAR_SUPERMARKETS = [
     'EDEKA', 'REWE', 'Lidl', 'ALDI NORD', 'PENNY', 'Kaufland',
-    'Netto Marken-Discount', 'Rossmann', 'dm', 'Real', 'ALDI SÜD', 'tegut' 
+    'Netto Marken-Discount', 'Rossmann', 'dm', 'Real', 'ALDI SÜD', 'tegut'
 ]
 
-# Load random energy drink facts from facts.json
+
 def load_energy_drink_facts():
-    if os.path.exists(facts_file_path):
+    """Loads random energy drink facts from facts.json."""
+    if os.path.exists(FACTS_FILE_PATH):
         try:
-            with open(facts_file_path, 'r') as file:
-                data = file.read().strip()  # Read and strip whitespace
+            with open(FACTS_FILE_PATH, 'r', encoding='utf-8') as file:
+                data = file.read().strip()
                 if not data:
-                    return []  # Handle empty file
-                facts = json.loads(data).get('facts', [])  # Extract the 'facts' list
-                # Filter out any empty strings from the facts list
+                    return []
+                facts = json.loads(data).get('facts', [])
                 return [fact for fact in facts if fact.strip()]
         except json.JSONDecodeError:
-            print(f"Error decoding '{facts_file_path}'. Please check the JSON format.")
+            print(f"Error decoding '{FACTS_FILE_PATH}'. Please check the JSON format.")
             return []
-    else:
-        return []
+    return []
 
-# Function to fetch offers for a given city
+
 def fetch_offers(zip_code):
+    """Fetches energy drink offers for a given city."""
     api_url = "https://api.marktguru.de/api/v1/offers/search"
     params = {
         'as': 'web',
@@ -143,40 +148,28 @@ def fetch_offers(zip_code):
     headers = {
         'User-Agent': 'Mozilla/5.0',
         'Accept': 'application/json',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Referer': 'https://www.marktguru.de/',
         'x-apikey': config.get('API', 'x_apikey'),
         'x-clientkey': config.get('API', 'x_clientkey'),
         'Content-Type': 'application/json',
-        'Origin': 'https://www.marktguru.de',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-site',
-        'TE': 'trailers'
     }
 
     response = requests.get(api_url, headers=headers, params=params)
     if response.status_code == 200:
         offers = response.json().get('results', [])
-        if use_supermarket_filter:
-            filtered_offers = [
-                offer for offer in offers
-                if offer.get('advertisers', [{}])[0].get('name', '') in most_popular_supermarkets
-            ]
-            return filtered_offers
+        if USE_SUPERMARKET_FILTER:
+            return [offer for offer in offers if offer.get('advertisers', [{}])[0].get('name', '') in MOST_POPULAR_SUPERMARKETS]
         return offers
-    else:
-        print(f"Error {response.status_code}: {response.text}")
-        return []
+    print(f"Error {response.status_code}: {response.text}")
+    return []
 
-# Load blacklist from JSON file
+
 def load_blacklist(blacklist_file='blacklist.json'):
+    """Loads blacklisted terms from blacklist.json."""
     try:
-        with open(blacklist_file, 'r') as file:
-            data = file.read().strip()  # Read and strip whitespace
+        with open(blacklist_file, 'r', encoding='utf-8') as file:
+            data = file.read().strip()
             if not data:
-                return []  # Handle empty file
+                return []
             return json.loads(data).get('blacklisted_terms', [])
     except FileNotFoundError:
         print(f"Blacklist file '{blacklist_file}' not found.")
@@ -185,8 +178,9 @@ def load_blacklist(blacklist_file='blacklist.json'):
         print(f"Error decoding '{blacklist_file}'. Please check the JSON format.")
         return []
 
-# Refined function to split messages into chunks if too long (max 4096 characters for Telegram)
+
 def split_message(message, max_length=4000):
+    """Splits long messages into chunks."""
     if len(message) > max_length:
         parts = []
         current_part = ""
@@ -199,20 +193,20 @@ def split_message(message, max_length=4000):
         if current_part:
             parts.append(current_part)
         return parts
-    else:
-        return [message]
+    return [message]
+
 
 def format_offers_for_all_cities(all_offers):
+    """Formats the offers and generates the final message."""
     today = datetime.today()
     week_number = today.isocalendar()[1]
     message = f"<b>🥤 Wöchentliche Energy Drink Angebote 🥤</b>\n\n"
     message += f"<i>Woche {week_number} ({today.strftime('%d.%m.%Y')})</i>\n\n"
 
-    # Load the blacklist
     blacklist = load_blacklist()
 
-    unique_offers = {}  # To store unique offers by store
-    tracked_offers = set()  # To track unique identifiers to avoid duplicates
+    unique_offers = {}
+    tracked_offers = set()
 
     for city, offers in all_offers.items():
         for offer in offers:
@@ -222,7 +216,7 @@ def format_offers_for_all_cities(all_offers):
             brand_name = html.escape(offer.get('brand', {}).get('name', 'Unbekannte Marke'))
 
             if any(blacklisted_term in product_name for blacklisted_term in blacklist):
-                continue  # Skip this offer if a blacklisted term is found
+                continue
 
             unique_identifier = (product_name, brand_name, price, store)
 
@@ -234,7 +228,7 @@ def format_offers_for_all_cities(all_offers):
             if store not in unique_offers:
                 unique_offers[store] = []
 
-            description = html.escape(offer.get('description', ''))  # Escape any special characters
+            description = html.escape(offer.get('description', ''))
             validity = ''
             if 'validityDates' in offer and offer['validityDates']:
                 valid_from = datetime.strptime(offer['validityDates'][0].get('from', '')[:10], '%Y-%m-%d').strftime('%d.%m.%Y')
@@ -245,7 +239,7 @@ def format_offers_for_all_cities(all_offers):
 
             offer_text = (
                 f"• <b>{brand_name.title()} {product_name.title()}</b>\n"
-                f"  💶 <u><b>Preis:</b> €{price:.2f}</u>\n"
+                f"  💰 <u><b>Preis:</b> €{price:.2f}</u>\n"
                 f"  📄 <i>{description}</i>\n"
                 f"  📅 <b>Gültig:</b> {validity}\n\n"
             )
@@ -270,8 +264,9 @@ def format_offers_for_all_cities(all_offers):
 
     return split_message(message)
 
-# Function to send multiple messages if needed and pin the last one
+
 def send_telegram_message(message_parts):
+    """Sends multiple messages if needed and pins the last one."""
     if config.has_option('Telegram', 'chat_id'):
         chat_ids = config.get('Telegram', 'chat_id').split(',')
     else:
@@ -279,8 +274,8 @@ def send_telegram_message(message_parts):
         return
 
     for chat_id in chat_ids:
-        chat_id = chat_id.strip()  # Remove any extra spaces
-        message_id_to_pin = None  # Track message ID to pin the last message
+        chat_id = chat_id.strip()
+        message_id_to_pin = None
 
         for part in message_parts:
             telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -302,8 +297,9 @@ def send_telegram_message(message_parts):
         if message_id_to_pin:
             pin_message_in_chat(chat_id, message_id_to_pin)
 
-# Function to pin a message in Telegram chat for each chat ID
+
 def pin_message_in_chat(chat_id, message_id):
+    """Pins a message in a Telegram chat."""
     pin_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/pinChatMessage"
     payload = {
         'chat_id': chat_id,
@@ -317,15 +313,17 @@ def pin_message_in_chat(chat_id, message_id):
     else:
         print(f"Failed to pin message in chat ID {chat_id}. Error {response.status_code}: {response.text}")
 
-# Main function
+
 def main():
+    """Main function to fetch offers and send them to Telegram."""
     all_offers = {}
-    for city, zip_code in big_cities.items():
+    for city, zip_code in BIG_CITIES.items():
         offers = fetch_offers(zip_code)
         all_offers[city] = offers
 
     message_parts = format_offers_for_all_cities(all_offers)
     send_telegram_message(message_parts)
+
 
 if __name__ == '__main__':
     main()
